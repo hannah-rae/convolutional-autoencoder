@@ -6,7 +6,7 @@ import tensorflow as tf
 import numpy as np
 import math
 
-import downsample_mcam
+import dataset
 # from libs.activations import lrelu
 # from libs.utils import corrupt
 
@@ -155,7 +155,7 @@ def test_mastcam_slices():
     import cv2
 
     # load mastcam data
-    mastcam = downsample_mcam.load_mcam_slices()
+    mastcam = dataset.load_mcam_slices()
     print mastcam.shape
     mean_img = np.mean(mastcam, axis=0)
     ae = autoencoder(input_shape=[None, 36, 40, 3])
@@ -183,7 +183,7 @@ def test_mastcam_slices():
     # %%
     # Plot example reconstructions
     n_examples = 10
-    test_xs = downsample_mcam.test_mcam_slices()[:batch_size]
+    test_xs = dataset.test_mcam_slices()[:batch_size]
     #test_xs_norm = np.array([img - mean_img for img in test_xs])
     recon = sess.run(ae['y'], feed_dict={ae['x']: test_xs})
     #recon = np.array([img + mean_img for img in recon])
@@ -202,7 +202,7 @@ def test_mastcam_rgb():
     import cv2
 
     # load mastcam data
-    mastcam = downsample_mcam.load_mcam_rgb()
+    mastcam = dataset.load_mcam_rgb()
     print mastcam.shape
     mean_img = np.mean(mastcam, axis=0)
     std_img = np.std(mastcam, axis=0)
@@ -231,7 +231,7 @@ def test_mastcam_rgb():
     # %%
     # Plot example reconstructions
     n_examples = 10
-    test_xs = downsample_mcam.load_test_earth()[:batch_size]
+    test_xs = dataset.load_test_earth()[:batch_size]
     #test_xs_norm = np.array([img - mean_img for img in test_xs])
     recon = sess.run(ae['y'], feed_dict={ae['x']: test_xs})
     #recon = np.array([img + mean_img for img in recon])
@@ -251,7 +251,7 @@ def test_mastcam_gray():
     from matplotlib.pyplot import imsave
 
     # load mastcam data
-    mastcam = downsample_mcam.load_mcam_gray()
+    mastcam = dataset.load_mcam_gray()
     mean_img = np.mean(mastcam, axis=0)
     ae = autoencoder(input_shape=[None, 144*144])
 
@@ -278,7 +278,7 @@ def test_mastcam_gray():
     # %%
     # Plot example reconstructions
     n_examples = 10
-    test_xs = downsample_mcam.load_test_gray()[0:batch_size]
+    test_xs = dataset.load_test_gray()[0:batch_size]
     test_xs_norm = np.array([img - mean_img for img in test_xs])
     recon, recon_err = sess.run([ae['y'], ae['cost']], feed_dict={ae['x']: test_xs_norm})
     print(recon.shape)
