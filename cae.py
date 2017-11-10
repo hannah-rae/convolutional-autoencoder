@@ -34,8 +34,8 @@ def lrelu(x, leak=0.2, name="lrelu"):
 
 # %%
 def autoencoder(input_shape,
-                n_filters=[1, 16, 8, 4],
-                filter_sizes=[3, 3, 3, 3],
+                n_filters=[1, 36, 24, 12],
+                filter_sizes=[7, 3, 3, 3],
                 corruption=False):
     """Build a deep denoising autoencoder w/ tied weights.
 
@@ -96,9 +96,7 @@ def autoencoder(input_shape,
     shapes = []
     for layer_i, n_output in enumerate(n_filters[1:]):
         n_input = current_input.get_shape().as_list()[3]
-        print n_input
         shapes.append(current_input.get_shape().as_list())
-        print shapes
         W = tf.Variable(
             tf.random_uniform([
                 filter_sizes[layer_i],
@@ -106,13 +104,14 @@ def autoencoder(input_shape,
                 n_input, n_output],
                 -1.0 / math.sqrt(n_input),
                 1.0 / math.sqrt(n_input)))
-        print W.get_shape()
         b = tf.Variable(tf.zeros([n_output]))
         encoder.append(W)
         output = lrelu(
             tf.add(tf.nn.conv2d(
                 current_input, W, strides=[1, 2, 2, 1], padding='SAME'), b))
-        current_input = output
+        noise_shape = tf.stack([tf.shape(output)[0], 1, 1, tf.shape(output)[3]])
+        output_drop = tf.nn.dropout(x=output, keep_prob=0.7, noise_shape=(noise_shape), name='conv_dropout')
+        current_input = output_drop
 
     # %%
     # store the latent representation
@@ -168,8 +167,8 @@ def test_mastcam_slices():
     sess.run(tf.global_variables_initializer())
 
     # Fit all training data
-    batch_size = 10
     n_epochs = 3
+    batch_size = 10
     num_batches = mastcam.shape[0] / batch_size
     print "num batches = %d", num_batches
     for epoch_i in range(n_epochs):
@@ -216,8 +215,8 @@ def test_mastcam_rgb():
     sess.run(tf.global_variables_initializer())
 
     # Fit all training data
-    batch_size = 10
     n_epochs = 3
+    batch_size = 10
     num_batches = mastcam.shape[0] / batch_size
     print "num batches = %d", num_batches
     for epoch_i in range(n_epochs):
@@ -231,7 +230,7 @@ def test_mastcam_rgb():
     # %%
     # Plot example reconstructions
     n_examples = 10
-    test_xs = dataset.load_test_earth()[:batch_size]
+    test_xs = dataset.load_mcam_rgb()[:batch_size]
     #test_xs_norm = np.array([img - mean_img for img in test_xs])
     recon = sess.run(ae['y'], feed_dict={ae['x']: test_xs})
     #recon = np.array([img + mean_img for img in recon])
