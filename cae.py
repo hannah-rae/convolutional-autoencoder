@@ -34,9 +34,8 @@ def lrelu(x, leak=0.2, name="lrelu"):
 
 # %%
 def autoencoder(input_shape,
-                n_filters=[1, 36, 24, 12],
-                filter_sizes=[7, 3, 3, 3],
-                corruption=False):
+                n_filters=[1, 72, 48, 24],
+                filter_sizes=[7, 3, 3, 3]):
     """Build a deep denoising autoencoder w/ tied weights.
 
     Parameters
@@ -66,9 +65,9 @@ def autoencoder(input_shape,
     """
     # %%
     # input to the network
-    x = tf.placeholder(
-        tf.float32, input_shape, name='x')
+    x = tf.placeholder(tf.float32, input_shape, name='x')
 
+    keep_prob = tf.placeholder(tf.float32, name='keep_prob')
 
     # %%
     # ensure 2-d is converted to square tensor.
@@ -86,11 +85,6 @@ def autoencoder(input_shape,
     current_input = x_tensor
 
     # %%
-    # Optionally apply denoising autoencoder
-    # if corruption:
-    #     current_input = corrupt(current_input)
-
-    # %%
     # Build the encoder
     encoder = []
     shapes = []
@@ -104,13 +98,13 @@ def autoencoder(input_shape,
                 n_input, n_output],
                 -1.0 / math.sqrt(n_input),
                 1.0 / math.sqrt(n_input)))
+        W = tf.clip_by_norm(W, clip_norm=4.0)
         b = tf.Variable(tf.zeros([n_output]))
         encoder.append(W)
         output = lrelu(
             tf.add(tf.nn.conv2d(
                 current_input, W, strides=[1, 2, 2, 1], padding='SAME'), b))
-        noise_shape = tf.stack([tf.shape(output)[0], 1, 1, tf.shape(output)[3]])
-        output_drop = tf.nn.dropout(x=output, keep_prob=0.7, noise_shape=(noise_shape), name='conv_dropout')
+        output_drop = tf.nn.dropout(x=output, keep_prob=keep_prob, name='conv_dropout')
         current_input = output_drop
 
     # %%
@@ -127,7 +121,7 @@ def autoencoder(input_shape,
         #     tf.random_uniform(encoder[layer_i].get_shape().as_list(),
         #         -1.0 / math.sqrt(encoder[layer_i].get_shape().as_list()[2]),
         #         1.0 / math.sqrt(encoder[layer_i].get_shape().as_list()[2])))
-        W = encoder[layer_i]
+        W = encoder[layer_i] # should be clipped already
         b = tf.Variable(tf.zeros([W.get_shape().as_list()[2]]))
         output = lrelu(tf.add(
             tf.nn.conv2d_transpose(
@@ -135,6 +129,12 @@ def autoencoder(input_shape,
                 tf.stack([tf.shape(x)[0], shape[1], shape[2], shape[3]]),
                 strides=[1, 2, 2, 1], padding='SAME'), b))
         current_input = output
+        # If it's the last layer, don't add dropout
+        # if (layer_i + 1) == len(shapes):
+        #     current_input = output
+        # else:
+        #     output_drop = tf.nn.dropout(x=output, keep_prob=0.7, name='conv_dropout')
+        #     current_input = output_drop
 
     # %%
     # now have the reconstruction through the network
@@ -144,7 +144,7 @@ def autoencoder(input_shape,
     # cost = tf.reduce_sum(tf.square(y - x_tensor))
 
     # %%
-    return {'x': x, 'z': z, 'y': y, 'cost': cost}
+    return {'x': x, 'z': z, 'y': y, 'cost': cost, 'keep_prob': keep_prob}
 
 
 def test_mastcam_slices():
@@ -207,7 +207,7 @@ def test_mastcam_rgb():
     std_img = np.std(mastcam, axis=0)
     ae = autoencoder(input_shape=[None, 144, 160, 3])
 
-    learning_rate = 0.001
+    learning_rate = 0.01
     optimizer = tf.train.AdamOptimizer(learning_rate).minimize(ae['cost'])
 
     # We create a session to use the graph
@@ -224,15 +224,15 @@ def test_mastcam_rgb():
             idx = batch_i*batch_size
             batch_xs = mastcam[idx:idx+batch_size]
             train = np.array([img - mean_img for img in batch_xs])
-            sess.run(optimizer, feed_dict={ae['x']: train})
-        print(epoch_i, sess.run(ae['cost'], feed_dict={ae['x']: train}))
+            sess.run(optimizer, feed_dict={ae['x']: train, ae['keep_prob']: 0.7})
+        print(epoch_i, sess.run(ae['cost'], feed_dict={ae['x']: train, ae['keep_prob']: 0.7}))
 
     # %%
     # Plot example reconstructions
     n_examples = 10
-    test_xs = dataset.load_mcam_rgb()[:batch_size]
+    test_xs = dataset.load_test_rgb()[:batch_size]
     #test_xs_norm = np.array([img - mean_img for img in test_xs])
-    recon = sess.run(ae['y'], feed_dict={ae['x']: test_xs})
+    recon = sess.run(ae['y'], feed_dict={ae['x']: test_xs, ae['keep_prob']: 1.0})
     #recon = np.array([img + mean_img for img in recon])
     t = str(int(time()))
     mkdir('./results/' + t)
