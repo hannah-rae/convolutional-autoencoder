@@ -7,7 +7,7 @@ from random import randint
 data_dir = '/home/hannah/data/mcam_Lall_Rall_udrs'
 new_data_dir = '/home/hannah/data/mcam_Lall_Rall_64x64'
 
-call(['mkdir', new_data_dir])
+#call(['mkdir', new_data_dir])
 
 def get_random_crop_point(height, width):
 	max_width = width - 64
@@ -24,7 +24,7 @@ def crop_img(crop_point, img):
 # in each iteration to augment our dataset. There are 739 images in
 # the source dataset that are > 64 x 64 pixels, thus we can set n 
 # to get N = n * 739 images.
-n = 6
+n = 1
 for i in range(n):
 	# Iterate through sequence_id_XXXX directories
 	for seq_dir in glob(data_dir + '/*'):
@@ -62,4 +62,7 @@ for i in range(n):
 				elif 'filter6' in img_f:
 					img[:,:,5] = img_f_crop
 			# Write the numpy array to the training example directory
-			np.save(new_data_dir + '/%s_%s_%s_%d.npy' % (seq_id, obs_id, sol, i), img)
+			if '0640' in sol or '0641' in sol or '1032' in sol or '1160' in sol or '1462' in sol or '1505' in sol or '1512' in sol or '1610' in sol:
+				np.save(new_data_dir + '/test/' + '%s_%s_%s_%d.npy' % (seq_id, obs_id, sol, i), img)
+			else:
+				np.save(new_data_dir + '/train/' + '/%s_%s_%s_%d.npy' % (seq_id, obs_id, sol, i), img)

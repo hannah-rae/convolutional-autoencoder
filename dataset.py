@@ -133,6 +133,32 @@ def load_mcam_rgb():
     np.random.shuffle(dataset)
     return dataset
 
+def load_mcam_6f():
+    train_dir = '/home/hannah/data/mcam_Lall_Rall_64x64/train'
+    num_images = len(glob(train_dir + '/*')[:20000])
+    # Each image is stored a 64 x 64 x 6 numpy array
+    # Create an empy array to hold all the numpy arrays
+    dataset = np.zeros((num_images, 64, 64, 6))
+    # Store the images in the dataset array
+    for i, img_fn in enumerate(glob(train_dir + '/*')[:20000]):
+        dataset[i] = np.load(img_fn)
+    print dataset.shape
+    np.random.shuffle(dataset)
+    return dataset
+
+def load_mcam_6f_test():
+    test_dir = '/home/hannah/data/mcam_Lall_Rall_64x64/test'
+    num_images = len(glob(test_dir + '/*')[:100])
+    # Each image is stored a 64 x 64 x 6 numpy array
+    # Create an empy array to hold all the numpy arrays
+    dataset = np.zeros((num_images, 64, 64, 6))
+    # Store the images in the dataset array
+    for i, img_fn in enumerate(glob(test_dir + '/*')[:100]):
+        dataset[i] = np.load(img_fn)
+    print dataset.shape
+    #np.random.shuffle(dataset)
+    return dataset
+
 def load_test_rgb():
     test_dir = '/home/hannah/data/mcam_vae/cdf_test'
     num_images = len(glob(test_dir + '/*'))
