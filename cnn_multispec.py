@@ -112,7 +112,7 @@ def cnn_model_fn(features, labels, mode):
 
   # Calculate Loss (for both TRAIN and EVAL modes)
   # loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits)
-  weights = tf.add(1, tf.multiply(labels, 329)) # will be weight = 1 for typical examples and 300 for novel
+  weights = tf.add(1, tf.multiply(labels, 328)) # will be weight = 1 for typical examples and 300 for novel
   loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits, weights=weights)
 
   acc = tf.metrics.accuracy(labels=labels, predictions=predictions["classes"], name="acc")

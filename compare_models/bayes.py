@@ -21,7 +21,7 @@ np.random.shuffle(results_train)
 # Convert to training and eval sets
 train_data = np.concatenate([results_train[:98700], results_dw[:300]])
 train_labels = np.concatenate([labels_train[:98700], labels_dw[:300]])
-weights = np.add(1, np.multiply(train_labels, 329))
+weights = np.add(1, np.multiply(train_labels, 328))
 
 eval_data = np.concatenate([results_train[98700:], results_dw[300:]])
 eval_labels = np.concatenate([labels_train[98700:], labels_dw[300:]])
