@@ -34,7 +34,7 @@ def lrelu(x, leak=0.2, name="lrelu"):
 
 # %%
 def autoencoder(input_shape,
-                n_filters=[1, 12, 8, 3],
+                n_filters=[1, 12, 8, 4],
                 filter_sizes=[7, 5, 3, 6]):
 
     # input to the network
@@ -60,7 +60,10 @@ def autoencoder(input_shape,
     # Linearly scale image to have zero mean and unit norm
     current_input = tf.map_fn(lambda frame: tf.image.per_image_standardization(frame), current_input)
     # Randomly fluctuate the brightness to help with overfitting
-    #current_input = tf.map_fn(lambda frame: tf.image.random_brightness(frame, max_delta=32. / 255.), current_input)
+    # current_input = tf.map_fn(lambda frame: tf.image.random_brightness(frame, max_delta=32. / 255.), current_input)
+    # Randomly flip horizontally to help with overfitting
+    #current_input = tf.map_fn(lambda frame: tf.image.random_flip_left_right(frame), current_input)
+
     input_image = current_input
 
     # %%
@@ -87,6 +90,7 @@ def autoencoder(input_shape,
         output = lrelu(
             tf.add(tf.nn.conv2d(
                 current_input, W, strides=[1, stride, stride, 1], padding='SAME'), b))
+        #output_bn = tf.layers.batch_normalization(inputs=output, axis=1, training=keep_prob != 1.0)
         #output_drop = tf.nn.dropout(x=output, keep_prob=keep_prob, name='conv_dropout')
         current_input = output
 
@@ -116,12 +120,12 @@ def autoencoder(input_shape,
                 tf.stack([tf.shape(x)[0], shape[1], shape[2], shape[3]]),
                 strides=[1, stride, stride, 1], padding='SAME'), b))
         current_input = output
-        # If it's the last layer, don't add dropout
+        # If it's the last layer, don't do batch norm
         # if (layer_i + 1) == len(shapes):
         #     current_input = output
         # else:
-        #     output_drop = tf.nn.dropout(x=output, keep_prob=0.7, name='conv_dropout')
-        #     current_input = output_drop
+        #     output_bn = tf.layers.batch_normalization(inputs=output, axis=1, training=keep_prob != 1.0)
+        #     current_input = output_bn
 
     # %%
     # now have the reconstruction through the network
@@ -147,8 +151,8 @@ def test_multispec():
     # std_img = np.std(mastcam, axis=0)
     ae = autoencoder(input_shape=[None, 64, 64, 6])
 
-    learning_rate = 0.01
-    optimizer = tf.train.AdamOptimizer(learning_rate).minimize(ae['cost'])
+    learning_rate = 0.001
+    optimizer = tf.train.AdamOptimizer(learning_rate, epsilon=1.0).minimize(ae['cost'])
 
     # We create a session to use the graph
     sess = tf.Session()
@@ -158,7 +162,7 @@ def test_multispec():
     saver = tf.train.Saver()
 
     # Fit all training data
-    n_epochs = 15
+    n_epochs = 30
     batch_size = 100
     num_batches = dataset.num_train_ex / batch_size
     print "num batches = %d", num_batches
@@ -173,7 +177,8 @@ def test_multispec():
         print(epoch_i, sess.run(ae['cost'], feed_dict={ae['x']: batch_xs, ae['keep_prob']: 1.0}))
     
     # Save the model for future training or testing
-    t = str(int(time()))
+    #t = str(int(time()))
+    t = 'udr_12-8-4_7-5-3_nodrop_epochs30'
     save_path = saver.save(sess, "/home/hannah/src/MastcamCAE/saved_sessions/%s.ckpt" % t)
     #save_path = saver.save(sess, "/scratch/hannah/MastcamCAE/saved_sessions/%s.ckpt" % t)
     print("Model saved in path: %s" % save_path)
@@ -182,12 +187,12 @@ def test_multispec():
     # %%
     # Plot example reconstructions and record reconstruction errors
     #n_examples = 10
-    test_xs, x_names = dataset.load_mcam_DW_test()
+    test_xs, x_names = dataset.load_mcam_DW_test(product='UDR')
     #test_xs_norm = np.array([img - mean_img for img in test_xs])
     #recon, err = sess.run([ae['y'], ae['cost']], feed_dict={ae['x']: test_xs, ae['keep_prob']: 1.0})
     #recon = np.array([img + mean_img for img in recon])
 
-    mkdir('./results/' + t)
+    mkdir('./results/DW_' + t)
 
     for i, example in enumerate(test_xs):
         # Run model on test example
@@ -224,7 +229,7 @@ def test_multispec():
         # Find the reconstruction difference for each filter
         diff = np.zeros((64, 64, 6))
         for f in range(6):
-            diff[:,:,f] = np.square(np.absolute(np.subtract(example[:,:,f], recon[0,:,:,f])))
+            diff[:,:,f] = np.square(np.subtract(example[:,:,f], recon[0,:,:,f]))
 
         # Compute a per-pixel reconstruction error image through all filters
         r_im = np.ndarray([64,64])
@@ -247,7 +252,8 @@ def test_multispec():
         diff_mean = np.average(per_filter_max_error)
 
         # Make a new directory for each image
-        img_dir = './results/' + t + '/' + str(int(diff_mean)) + '_' + x_names[i]
+        #img_dir = './results/DW_' + t + '/' + str(int(diff_mean*100000000)) + '_' + x_names[i] # RDR
+        img_dir = './results/DW_' + t + '/' + str(int(diff_mean)) + '_' + x_names[i] # UDR
         mkdir(img_dir)
 
         # Write the explanation product
@@ -260,9 +266,15 @@ def test_multispec():
 
         # Six filters in each example
         for f in range(6):
-            # Write filter f as grayscale image
+            # UDRs
             cv2.imwrite(img_dir + '/' + str(f+1) + '_input.png', example[:,:,f])
             cv2.imwrite(img_dir + '/' + str(f+1) + '_' + str(int(np.max(diff[:,:,f]))) + '_recon.png', recon[0,:,:,f])
+
+            # Write filter f as grayscale image - RDRs
+            # scaled_ex = np.interp(example[:,:,f], (example[:,:,f].min(), example[:,:,f].max()), (0, 255))
+            # cv2.imwrite(img_dir + '/' + str(f+1) + '_input.png', scaled_ex)
+            # scaled_recon = np.interp(recon[0,:,:,f], (recon[0,:,:,f].min(), recon[0,:,:,f].max()), (0, 255))
+            # cv2.imwrite(img_dir + '/' + str(f+1) + '_' + str(int(np.max(diff[:,:,f])*100000000)) + '_recon.png', scaled_recon)
             #cv2.imwrite(img_dir + '/' + str(f+1) + '_' + str(int(np.max(diff[:,:,f]))) + '_diff.png', diff[:,:,f])
 
 

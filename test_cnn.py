@@ -148,25 +148,24 @@ def main(unused_argv):
   novel_results = '/home/hannah/src/MastcamCAE/results/DW_udr_12-8-3_7-5-3_nodrop_epochs15'
   typical_results = '/home/hannah/src/MastcamCAE/results/train_udr_12-8-3_7-5-3_nodrop_epochs15'
 
-  typical_data = dataset.load_diff_images(typical_results) # Returns np.array
-  typical_labels = np.zeros([typical_data.shape[0],1], dtype=np.int32)
-  novel_data = dataset.load_diff_images(novel_results) # Returns np.array
-  novel_labels = np.ones([novel_data.shape[0],1], dtype=np.int32)
+  # typical_data = dataset.load_diff_images(typical_results) # Returns np.array
+  # typical_labels = np.zeros([typical_data.shape[0],1], dtype=np.int32)
+  # novel_data = dataset.load_diff_images(novel_results) # Returns np.array
+  # novel_labels = np.ones([novel_data.shape[0],1], dtype=np.int32)
 
-  # Convert to training and eval sets
-  train_data = np.concatenate([typical_data[:98700,:,:,:], novel_data[:300,:,:,:]])
-  train_labels = np.concatenate([typical_labels[:98700], novel_labels[:300]])
-  eval_data = np.concatenate([typical_data[98700:,:,:,:], novel_data[300:,:,:,:]])
-  eval_labels = np.concatenate([typical_labels[98700:], novel_labels[300:]])
+  # # Convert to training and eval sets
+  # train_data = np.concatenate([typical_data[:98700,:,:,:], novel_data[:300,:,:,:]])
+  # train_labels = np.concatenate([typical_labels[:98700], novel_labels[:300]])
+  # eval_data = np.concatenate([typical_data[98700:,:,:,:], novel_data[300:,:,:,:]])
+  # eval_labels = np.concatenate([typical_labels[98700:], novel_labels[300:]])
 
-  # train_data = np.concatenate([typical_data[:4500,:,:,:], novel_data[:300,:,:,:]])
-  # train_labels = np.concatenate([typical_labels[:4500], novel_labels[:300]])
-  # eval_data = np.concatenate([typical_data[4500:,:,:,:], novel_data[300:,:,:,:]])
-  # eval_labels = np.concatenate([typical_labels[4500:], novel_labels[300:]])
+  test_results = '/home/hannah/src/MastcamCAE/results/test_udr_12-8-3_7-5-3_nodrop_epochs15'
+  new_samples, test_names = dataset.load_diff_images(test_results)
+  #print(test_names)
 
   # Create the Estimator
   multispec_classifier = tf.estimator.Estimator(
-      model_fn=cnn_model_fn, model_dir="/home/hannah/src/MastcamCAE/saved_sessions/multispec_convnet_model_nodrop_eps15_udr_60k_seed42")
+      model_fn=cnn_model_fn, model_dir="/tmp/multispec_convnet_model_nodrop_eps15_udr_60k")
 
   # Set up logging for predictions
   # Log the values in the "Softmax" tensor with label "probabilities"
@@ -184,17 +183,40 @@ def main(unused_argv):
   #     shuffle=True)
   # multispec_classifier.train(
   #     input_fn=train_input_fn,
-  #     steps=20000,
+  #     steps=180000,
   #     hooks=[logging_hook])
 
   # Evaluate the model and print results
-  eval_input_fn = tf.estimator.inputs.numpy_input_fn(
-      x={"x": eval_data},
-      y=eval_labels,
+  # eval_input_fn = tf.estimator.inputs.numpy_input_fn(
+  #     x={"x": eval_data},
+  #     y=eval_labels,
+  #     num_epochs=1,
+  #     shuffle=False)
+  # eval_results = multispec_classifier.evaluate(input_fn=eval_input_fn)
+  # print(eval_results)
+
+  # Classify new examples
+  predict_input_fn = tf.estimator.inputs.numpy_input_fn(
+      x={"x": new_samples},
       num_epochs=1,
       shuffle=False)
-  eval_results = multispec_classifier.evaluate(input_fn=eval_input_fn)
-  print(eval_results)
+
+  predictions = list(multispec_classifier.predict(input_fn=predict_input_fn))
+  predicted_classes = [p["classes"] for p in predictions]
+  predicted_prob = [p["probabilities"] for p in predictions]
+
+  np.savetxt('/home/hannah/src/MastcamCAE/results/cnn_names.txt', np.array(test_names), fmt='%s')
+  np.savetxt('/home/hannah/src/MastcamCAE/results/cnn_probs.txt', predicted_prob)
+  np.savetxt('/home/hannah/src/MastcamCAE/results/cnn_classes.txt', predicted_classes)
+
+  # results = zip(test_names, predicted_prob, predicted_classes)
+  # results_file = open('/home/hannah/src/MastcamCAE/results/cnn_predictions.txt', 'w+')
+  # for (name, pred, class_) in results:
+  #   results_file.write("%s  %f  %d\n" % (name, pred, class_))
+
+  print(
+      "New Samples, Class Predictions:    {}\n"
+      .format(predicted_classes))
 
 
 if __name__ == "__main__":

@@ -86,8 +86,9 @@ def autoencoder(input_shape,
         output = lrelu(
             tf.add(tf.nn.conv2d(
                 current_input, W, strides=[1, stride, stride, 1], padding='SAME'), b))
-        output_drop = tf.nn.dropout(x=output, keep_prob=keep_prob, name='conv_dropout')
-        current_input = output_drop
+        #output_bn = tf.layers.batch_normalization(inputs=output, training=training)
+        #output_drop = tf.nn.dropout(x=output, keep_prob=keep_prob, name='conv_dropout')
+        current_input = output
 
     # %%
     # store the latent representation
@@ -111,12 +112,12 @@ def autoencoder(input_shape,
                 tf.stack([tf.shape(x)[0], shape[1], shape[2], shape[3]]),
                 strides=[1, stride, stride, 1], padding='SAME'), b))
         current_input = output
-        # If it's the last layer, don't add dropout
+        # If it's the last layer, don't do batch norm
         # if (layer_i + 1) == len(shapes):
         #     current_input = output
         # else:
-        #     output_drop = tf.nn.dropout(x=output, keep_prob=0.7, name='conv_dropout')
-        #     current_input = output_drop
+        #     output_bn = tf.layers.batch_normalization(inputs=output, training=training)
+        #     current_input = output_bn
 
     # %%
     # now have the reconstruction through the network
@@ -136,30 +137,37 @@ def test_multispec():
 
     ae = autoencoder(input_shape=[None, 64, 64, 6])
 
-    learning_rate = 0.01
-    optimizer = tf.train.AdamOptimizer(learning_rate).minimize(ae['cost'])
+    learning_rate = 0.001
+    optimizer = tf.train.AdamOptimizer(learning_rate, epsilon=0.1).minimize(ae['cost'])
 
     # We create a session to use the graph
     sess = tf.Session()
 
     # Add ops to save and restore all the variables.
     saver = tf.train.Saver()
-    saver.restore(sess, '/home/hannah/src/MastcamCAE/saved_sessions/12-8-3_7-5-3_nodrop_epochs15/1524259856.ckpt')
+    saver.restore(sess, '/home/hannah/src/MastcamCAE/saved_sessions/udr_12-8-3_7-5-3_nodrop_epochs15.ckpt')
     
     # Save the model for future training or testing
-    t = str(int(time()))
+    #t = str(int(time()))
+    t = 'udr_12-8-3_7-5-3_nodrop_epochs15'
 
     # %%
     # Plot example reconstructions and record reconstruction errors
-    test_xs, x_names = dataset.load_mcam_6f_train()
+    test_xs, x_names = dataset.load_mcam_DW_test(product='UDR')
 
-    mkdir('./results/' + t)
+    mkdir('./results/DW_mse_' + t)
 
     for i, example in enumerate(test_xs):
         # Run model on test example
         ex = np.zeros((1, 64, 64, 6))
         ex[0] = example
         recon, err = sess.run([ae['y'], ae['cost']], feed_dict={ae['x']: ex, ae['keep_prob']: 1.0})
+        # print x_names[i]
+        # # Skip one that had a NaN bc we want to see how this goes
+        # # nan_list = ['sequence_id_18789_L1_sol1729_1', 'sequence_id_18789_L1_sol1729_2', 'sequence_id_18789_L1_sol1729_0', 'sequence_id_18789_L1_sol1729_3']
+        # if 'sequence_id_18789' in x_names[i]:
+        #     continue
+
         # # Extract filters 3,5,6 for R,G,B
         # test_vis = np.zeros((64, 64, 3))
         # recon_vis = np.zeros((64, 64, 3))
@@ -190,7 +198,7 @@ def test_multispec():
         # Find the reconstruction difference for each filter
         diff = np.zeros((64, 64, 6))
         for f in range(6):
-            diff[:,:,f] = np.square(np.absolute(np.subtract(example[:,:,f], recon[0,:,:,f])))
+            diff[:,:,f] = np.abs(np.subtract(example[:,:,f], recon[0,:,:,f]))
 
         # Compute a per-pixel reconstruction error image through all filters
         r_im = np.ndarray([64,64])
@@ -213,7 +221,8 @@ def test_multispec():
         diff_mean = np.average(per_filter_max_error)
 
         # Make a new directory for each image
-        img_dir = './results/' + t + '/' + str(int(diff_mean)) + '_' + x_names[i]
+        # img_dir = './results/train_' + t + '/' + str(int(diff_mean*100000000)) + '_' + x_names[i] # RDR
+        img_dir = './results/DW_mse_' + t + '/' + str(int(err)) + '_' + x_names[i] # UDR
         mkdir(img_dir)
 
         # Write the explanation product
@@ -223,13 +232,19 @@ def test_multispec():
         #cv2.imwrite(img_dir + '/explanation.png', r_im)
         np.save(img_dir + '/explanation.npy', r_im)
         np.save(img_dir + '/diff_6f.npy', diff)
-
         # Six filters in each example
         for f in range(6):
-            # Write filter f as grayscale image
+            # UDRs
             cv2.imwrite(img_dir + '/' + str(f+1) + '_input.png', example[:,:,f])
             cv2.imwrite(img_dir + '/' + str(f+1) + '_' + str(int(np.max(diff[:,:,f]))) + '_recon.png', recon[0,:,:,f])
+
+            # Write filter f as grayscale image - RDRs
+            # scaled_ex = np.interp(example[:,:,f], (example[:,:,f].min(), example[:,:,f].max()), (0, 255))
+            # cv2.imwrite(img_dir + '/' + str(f+1) + '_input.png', scaled_ex)
+            # scaled_recon = np.interp(recon[0,:,:,f], (recon[0,:,:,f].min(), recon[0,:,:,f].max()), (0, 255))
+            # cv2.imwrite(img_dir + '/' + str(f+1) + '_' + str(int(np.max(diff[:,:,f])*100000000)) + '_recon.png', scaled_recon)
             #cv2.imwrite(img_dir + '/' + str(f+1) + '_' + str(int(np.max(diff[:,:,f]))) + '_diff.png', diff[:,:,f])
+
 
 
 # %%
