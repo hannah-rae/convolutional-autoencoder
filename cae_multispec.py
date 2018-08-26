@@ -5,10 +5,17 @@ Parag K. Mital, Jan 2016
 import tensorflow as tf
 import numpy as np
 import math
-
+import argparse
 import dataset
 # from libs.activations import lrelu
 # from libs.utils import corrupt
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--epochs', type=int, default=30)
+parser.add_argument('--batch_size', type=int, default=100)
+parser.add_argument('--summaries_dir', default='/scratch/hannah/tf-summaries')
+args = parser.parse_args()
+
 
 def lrelu(x, leak=0.2, name="lrelu"):
     """Leaky rectifier.
@@ -34,7 +41,7 @@ def lrelu(x, leak=0.2, name="lrelu"):
 
 # %%
 def autoencoder(input_shape,
-                n_filters=[1, 12, 8, 4],
+                n_filters=[1, 12, 8, 3],
                 filter_sizes=[7, 5, 3, 6]):
 
     # input to the network
@@ -132,10 +139,13 @@ def autoencoder(input_shape,
     y = current_input
 
     cost = tf.losses.mean_squared_error(x_tensor, y)
-    
+    tf.summary.scalar('train_loss', cost)
+
+    # Merge all the summaries 
+    merged = tf.summary.merge_all()
 
     # %%
-    return {'x': x, 'z': z, 'y': y, 'cost': cost, 'keep_prob': keep_prob}
+    return {'x': x, 'z': z, 'y': y, 'cost': cost, 'keep_prob': keep_prob, 'merged': merged}
 
 
 def test_multispec():
@@ -160,122 +170,119 @@ def test_multispec():
 
     # Add ops to save and restore all the variables.
     saver = tf.train.Saver()
-
+    train_writer = tf.summary.FileWriter(args.summaries_dir + '/train',
+                                          sess.graph)
     # Fit all training data
-    n_epochs = 30
-    batch_size = 100
-    num_batches = dataset.num_train_ex / batch_size
+    num_batches = dataset.num_train_ex / args.batch_size
     print "num batches = %d", num_batches
-    for epoch_i in range(n_epochs):
+    for epoch_i in range(args.epochs):
         for batch_i in range(num_batches):
             # idx = batch_i*batch_size
             # batch_xs = mastcam[idx:idx+batch_size]
-            batch_xs = dataset.next_batch_6f(batchsize=batch_size)
+            batch_xs = dataset.next_batch_6f(batchsize=args.batch_size)
             #train = np.array([img - mean_img for img in batch_xs])
             sess.run(optimizer, feed_dict={ae['x']: batch_xs, ae['keep_prob']: 0.6})
-            #print(batch_i, sess.run(ae['cost'], feed_dict={ae['x']: batch_xs, ae['keep_prob']: 0.7}))
+            summary = sess.run(ae['merged'], feed_dict={ae['x']: batch_xs, ae['keep_prob']: 0.6})
+            train_writer.add_summary(summary, batch_i)
         print(epoch_i, sess.run(ae['cost'], feed_dict={ae['x']: batch_xs, ae['keep_prob']: 1.0}))
     
     # Save the model for future training or testing
-    #t = str(int(time()))
-    t = 'udr_12-8-4_7-5-3_nodrop_epochs30'
-    save_path = saver.save(sess, "/home/hannah/src/MastcamCAE/saved_sessions/%s.ckpt" % t)
-    #save_path = saver.save(sess, "/scratch/hannah/MastcamCAE/saved_sessions/%s.ckpt" % t)
+    name = 'udr_12-8-3_7-5-3_nodrop_epochs%d_stride4data' % args.epochs
+    save_path = saver.save(sess, "/scratch/hannah/saved_sessions/%s.ckpt" % name)
     print("Model saved in path: %s" % save_path)
 
+    # # %%
+    # # Plot example reconstructions and record reconstruction errors
+    # #n_examples = 10
+    # test_xs, x_names = dataset.load_mcam_DW_test(product='UDR')
+    # #test_xs_norm = np.array([img - mean_img for img in test_xs])
+    # #recon, err = sess.run([ae['y'], ae['cost']], feed_dict={ae['x']: test_xs, ae['keep_prob']: 1.0})
+    # #recon = np.array([img + mean_img for img in recon])
 
-    # %%
-    # Plot example reconstructions and record reconstruction errors
-    #n_examples = 10
-    test_xs, x_names = dataset.load_mcam_DW_test(product='UDR')
-    #test_xs_norm = np.array([img - mean_img for img in test_xs])
-    #recon, err = sess.run([ae['y'], ae['cost']], feed_dict={ae['x']: test_xs, ae['keep_prob']: 1.0})
-    #recon = np.array([img + mean_img for img in recon])
+    # mkdir('./results/DW_' + t)
 
-    mkdir('./results/DW_' + t)
+    # for i, example in enumerate(test_xs):
+    #     # Run model on test example
+    #     ex = np.zeros((1, 64, 64, 6))
+    #     ex[0] = example
+    #     recon, err = sess.run([ae['y'], ae['cost']], feed_dict={ae['x']: ex, ae['keep_prob']: 1.0})
+    #     # # Extract filters 3,5,6 for R,G,B
+    #     # test_vis = np.zeros((64, 64, 3))
+    #     # recon_vis = np.zeros((64, 64, 3))
+    #     # # We want to visualize filters 3,5,6 as R,G,B
+    #     # test_vis[:,:,0] = example[:,:,2]
+    #     # test_vis[:,:,1] = example[:,:,4]
+    #     # test_vis[:,:,2] = example[:,:,5]
+    #     # # Same for the reconstructed image
+    #     # recon_vis[:,:,0] = recon[0,:,:,2]
+    #     # recon_vis[:,:,1] = recon[0,:,:,4]
+    #     # recon_vis[:,:,2] = recon[0,:,:,5]
 
-    for i, example in enumerate(test_xs):
-        # Run model on test example
-        ex = np.zeros((1, 64, 64, 6))
-        ex[0] = example
-        recon, err = sess.run([ae['y'], ae['cost']], feed_dict={ae['x']: ex, ae['keep_prob']: 1.0})
-        # # Extract filters 3,5,6 for R,G,B
-        # test_vis = np.zeros((64, 64, 3))
-        # recon_vis = np.zeros((64, 64, 3))
-        # # We want to visualize filters 3,5,6 as R,G,B
-        # test_vis[:,:,0] = example[:,:,2]
-        # test_vis[:,:,1] = example[:,:,4]
-        # test_vis[:,:,2] = example[:,:,5]
-        # # Same for the reconstructed image
-        # recon_vis[:,:,0] = recon[0,:,:,2]
-        # recon_vis[:,:,1] = recon[0,:,:,4]
-        # recon_vis[:,:,2] = recon[0,:,:,5]
+    #     # cv2.imwrite('./results/' + t + '/' + str(i) + '_input.png', test_vis)
+    #     # cv2.imwrite('./results/' + t + '/' + str(i) + '_' + str(int(err)) + '_recon.png', recon_vis)
 
-        # cv2.imwrite('./results/' + t + '/' + str(i) + '_input.png', test_vis)
-        # cv2.imwrite('./results/' + t + '/' + str(i) + '_' + str(int(err)) + '_recon.png', recon_vis)
+    #     input_per_filter_total_error = [np.sum(example[:,:,f]) for f in range(6)]
+    #     input_per_filter_mean_error = [np.mean(example[:,:,f]) for f in range(6)]
+    #     input_per_filter_var_error = [np.var(example[:,:,f]) for f in range(6)]
+    #     input_per_filter_max_error = [np.max(example[:,:,f]) for f in range(6)]
+    #     input_per_filter_mean_var_max = np.concatenate([input_per_filter_mean_error, input_per_filter_var_error, input_per_filter_max_error])
 
-        input_per_filter_total_error = [np.sum(example[:,:,f]) for f in range(6)]
-        input_per_filter_mean_error = [np.mean(example[:,:,f]) for f in range(6)]
-        input_per_filter_var_error = [np.var(example[:,:,f]) for f in range(6)]
-        input_per_filter_max_error = [np.max(example[:,:,f]) for f in range(6)]
-        input_per_filter_mean_var_max = np.concatenate([input_per_filter_mean_error, input_per_filter_var_error, input_per_filter_max_error])
+    #     recon_per_filter_total_error = [np.sum(recon[0,:,:,f]) for f in range(6)]
+    #     recon_per_filter_mean_error = [np.mean(recon[0,:,:,f]) for f in range(6)]
+    #     recon_per_filter_var_error = [np.var(recon[0,:,:,f]) for f in range(6)]
+    #     recon_per_filter_max_error = [np.max(recon[0,:,:,f]) for f in range(6)]
+    #     recon_per_filter_mean_var_max = np.concatenate([recon_per_filter_mean_error, recon_per_filter_var_error, recon_per_filter_max_error])
 
-        recon_per_filter_total_error = [np.sum(recon[0,:,:,f]) for f in range(6)]
-        recon_per_filter_mean_error = [np.mean(recon[0,:,:,f]) for f in range(6)]
-        recon_per_filter_var_error = [np.var(recon[0,:,:,f]) for f in range(6)]
-        recon_per_filter_max_error = [np.max(recon[0,:,:,f]) for f in range(6)]
-        recon_per_filter_mean_var_max = np.concatenate([recon_per_filter_mean_error, recon_per_filter_var_error, recon_per_filter_max_error])
+    #     # Find the reconstruction difference for each filter
+    #     diff = np.zeros((64, 64, 6))
+    #     for f in range(6):
+    #         diff[:,:,f] = np.square(np.subtract(example[:,:,f], recon[0,:,:,f]))
 
-        # Find the reconstruction difference for each filter
-        diff = np.zeros((64, 64, 6))
-        for f in range(6):
-            diff[:,:,f] = np.square(np.subtract(example[:,:,f], recon[0,:,:,f]))
+    #     # Compute a per-pixel reconstruction error image through all filters
+    #     r_im = np.ndarray([64,64])
+    #     weights=[1./diff.shape[2]]*diff.shape[2]
+    #     for j in range(diff.shape[0]):
+    #         for k in range(diff.shape[1]):
+    #             # compute a weighted sum in each pixel through all filters
+    #             r_im[j,k] = np.dot(diff[j,k,:], weights) 
 
-        # Compute a per-pixel reconstruction error image through all filters
-        r_im = np.ndarray([64,64])
-        weights=[1./diff.shape[2]]*diff.shape[2]
-        for j in range(diff.shape[0]):
-            for k in range(diff.shape[1]):
-                # compute a weighted sum in each pixel through all filters
-                r_im[j,k] = np.dot(diff[j,k,:], weights) 
+    #     # Computing per filter error as the sum of all error in the image 
+    #     # because we don't want to dampen out the contributions of small 
+    #     # anomalies to the error
+    #     per_filter_total_error = [np.sum(diff[:,:,f]) for f in range(6)]
+    #     per_filter_mean_error = [np.mean(diff[:,:,f]) for f in range(6)]
+    #     per_filter_var_error = [np.var(diff[:,:,f]) for f in range(6)]
+    #     per_filter_max_error = [np.max(diff[:,:,f]) for f in range(6)]
+    #     diff_per_filter_mean_var_max = np.concatenate([per_filter_mean_error, per_filter_var_error, per_filter_max_error])
 
-        # Computing per filter error as the sum of all error in the image 
-        # because we don't want to dampen out the contributions of small 
-        # anomalies to the error
-        per_filter_total_error = [np.sum(diff[:,:,f]) for f in range(6)]
-        per_filter_mean_error = [np.mean(diff[:,:,f]) for f in range(6)]
-        per_filter_var_error = [np.var(diff[:,:,f]) for f in range(6)]
-        per_filter_max_error = [np.max(diff[:,:,f]) for f in range(6)]
-        diff_per_filter_mean_var_max = np.concatenate([per_filter_mean_error, per_filter_var_error, per_filter_max_error])
+    #     #w = [0.026427, 1.903135, 0.022009, 0.105691, 0.194797, 0.130667]
+    #     diff_mean = np.average(per_filter_max_error)
 
-        #w = [0.026427, 1.903135, 0.022009, 0.105691, 0.194797, 0.130667]
-        diff_mean = np.average(per_filter_max_error)
+    #     # Make a new directory for each image
+    #     #img_dir = './results/DW_' + t + '/' + str(int(diff_mean*100000000)) + '_' + x_names[i] # RDR
+    #     img_dir = './results/DW_' + t + '/' + str(int(diff_mean)) + '_' + x_names[i] # UDR
+    #     mkdir(img_dir)
 
-        # Make a new directory for each image
-        #img_dir = './results/DW_' + t + '/' + str(int(diff_mean*100000000)) + '_' + x_names[i] # RDR
-        img_dir = './results/DW_' + t + '/' + str(int(diff_mean)) + '_' + x_names[i] # UDR
-        mkdir(img_dir)
+    #     # Write the explanation product
+    #     np.save(img_dir + '/diff_mean_var_max.npy', diff_per_filter_mean_var_max)
+    #     np.save(img_dir + '/input_mean_var_max.npy', input_per_filter_mean_var_max)
+    #     np.save(img_dir + '/recon_mean_var_max.npy', recon_per_filter_mean_var_max)
+    #     #cv2.imwrite(img_dir + '/explanation.png', r_im)
+    #     np.save(img_dir + '/explanation.npy', r_im)
+    #     np.save(img_dir + '/diff_6f.npy', diff)
 
-        # Write the explanation product
-        np.save(img_dir + '/diff_mean_var_max.npy', diff_per_filter_mean_var_max)
-        np.save(img_dir + '/input_mean_var_max.npy', input_per_filter_mean_var_max)
-        np.save(img_dir + '/recon_mean_var_max.npy', recon_per_filter_mean_var_max)
-        #cv2.imwrite(img_dir + '/explanation.png', r_im)
-        np.save(img_dir + '/explanation.npy', r_im)
-        np.save(img_dir + '/diff_6f.npy', diff)
+    #     # Six filters in each example
+    #     for f in range(6):
+    #         # UDRs
+    #         cv2.imwrite(img_dir + '/' + str(f+1) + '_input.png', example[:,:,f])
+    #         cv2.imwrite(img_dir + '/' + str(f+1) + '_' + str(int(np.max(diff[:,:,f]))) + '_recon.png', recon[0,:,:,f])
 
-        # Six filters in each example
-        for f in range(6):
-            # UDRs
-            cv2.imwrite(img_dir + '/' + str(f+1) + '_input.png', example[:,:,f])
-            cv2.imwrite(img_dir + '/' + str(f+1) + '_' + str(int(np.max(diff[:,:,f]))) + '_recon.png', recon[0,:,:,f])
-
-            # Write filter f as grayscale image - RDRs
-            # scaled_ex = np.interp(example[:,:,f], (example[:,:,f].min(), example[:,:,f].max()), (0, 255))
-            # cv2.imwrite(img_dir + '/' + str(f+1) + '_input.png', scaled_ex)
-            # scaled_recon = np.interp(recon[0,:,:,f], (recon[0,:,:,f].min(), recon[0,:,:,f].max()), (0, 255))
-            # cv2.imwrite(img_dir + '/' + str(f+1) + '_' + str(int(np.max(diff[:,:,f])*100000000)) + '_recon.png', scaled_recon)
-            #cv2.imwrite(img_dir + '/' + str(f+1) + '_' + str(int(np.max(diff[:,:,f]))) + '_diff.png', diff[:,:,f])
+    #         # Write filter f as grayscale image - RDRs
+    #         # scaled_ex = np.interp(example[:,:,f], (example[:,:,f].min(), example[:,:,f].max()), (0, 255))
+    #         # cv2.imwrite(img_dir + '/' + str(f+1) + '_input.png', scaled_ex)
+    #         # scaled_recon = np.interp(recon[0,:,:,f], (recon[0,:,:,f].min(), recon[0,:,:,f].max()), (0, 255))
+    #         # cv2.imwrite(img_dir + '/' + str(f+1) + '_' + str(int(np.max(diff[:,:,f])*100000000)) + '_recon.png', scaled_recon)
+    #         #cv2.imwrite(img_dir + '/' + str(f+1) + '_' + str(int(np.max(diff[:,:,f]))) + '_diff.png', diff[:,:,f])
 
 
 # %%
